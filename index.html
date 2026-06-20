@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0a0015">
+<title>✨ Magic Hands ✨</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #0a0015;
+    overflow: hidden;
+    touch-action: none;
+    font-family: 'Segoe UI', sans-serif;
+  }
+  #container {
+    position: relative;
+    width: 100%; height: 100%;
+  }
+  #video {
+    position: absolute;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+    opacity: 0;
+    pointer-events: none;
+  }
+  #canvas {
+    position: absolute;
+    width: 100%; height: 100%;
+    top: 0; left: 0;
+  }
+  #loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.4rem;
+    gap: 18px;
+    z-index: 10;
+    background: #0a0015;
+    transition: opacity 0.8s;
+  }
+  #loading.hidden { opacity: 0; pointer-events: none; }
+  .spinner {
+    width: 60px; height: 60px;
+    border: 4px solid rgba(255,255,255,0.15);
+    border-top-color: #ff88cc;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #score-badge {
+    position: absolute;
+    top: 16px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255,255,255,0.12);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 40px;
+    padding: 8px 24px;
+    color: white;
+    font-size: 1.1rem;
+    letter-spacing: 0.05em;
+    z-index: 5;
+    pointer-events: none;
+    text-shadow: 0 0 12px #ffaaff;
+  }
+</style>
+</head>
+<body>
+<div id="container">
+  <video id="video" playsinline autoplay muted></video>
+  <canvas id="canvas"></canvas>
+  <div id="score-badge">✨ <span id="score">0</span> sparks!</div>
+  <div id="loading">
+    <div class="spinner"></div>
+    <div>Loading magic... 🌸</div>
+  </div>
+</div>
+
+<!-- MediaPipe via CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<script>
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const loading = document.getElementById('loading');
+const scoreEl = document.getElementById('score');
+
+let W, H;
+let totalSpawned = 0;
+const particles = [];
+let handPoints = []; // array of {x,y} for all detected landmarks
+
+// ─── RESIZE ────────────────────────────────────────────────────────
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ─── PARTICLE TYPES ────────────────────────────────────────────────
+const TYPES = ['flower', 'spark', 'butterfly', 'firefly', 'leaf', 'star'];
+
+const PALETTES = {
+  flower:    ['#ff6eb4','#ff9de2','#ffb347','#ff6b6b','#c084fc','#f9a8d4'],
+  spark:     ['#ffe066','#ff9900','#fff','#ff6600','#ffcc00','#ffd700'],
+  butterfly: ['#67e8f9','#a5f3fc','#f0abfc','#e879f9','#fbbf24','#34d399'],
+  firefly:   ['#d9f99d','#bbf7d0','#6ee7b7','#fff','#fef08a','#86efac'],
+  leaf:      ['#86efac','#4ade80','#bbf7d0','#fbbf24','#fb923c','#f87171'],
+  star:      ['#e0f2fe','#bae6fd','#fff','#f0abfc','#fde68a','#fca5a5'],
+};
+
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function rand(a, b) { return a + Math.random() * (b - a); }
+
+class Particle {
+  constructor(x, y) {
+    this.type = pick(TYPES);
+    this.x = x + rand(-18, 18);
+    this.y = y + rand(-18, 18);
+    this.color = pick(PALETTES[this.type]);
+    this.color2 = pick(PALETTES[this.type]);
+    this.size = rand(10, 28);
+    this.life = 1;
+    this.decay = rand(0.008, 0.022);
+    this.vx = rand(-2.5, 2.5);
+    this.vy = rand(-4, -1);
+    this.gravity = rand(0.04, 0.12);
+    this.rot = rand(0, Math.PI * 2);
+    this.rotSpeed = rand(-0.08, 0.08);
+    this.wobble = rand(0, Math.PI * 2);
+    this.wobbleSpeed = rand(0.04, 0.1);
+    this.wobbleAmp = rand(0.5, 2.5);
+    // butterfly flutter
+    this.flap = 0;
+    this.flapSpeed = rand(0.12, 0.25);
+    // firefly glow pulse
+    this.pulse = rand(0, Math.PI * 2);
+    this.pulseSpeed = rand(0.06, 0.14);
+  }
+
+  update() {
+    this.life -= this.decay;
+    this.vy += this.gravity;
+    this.wobble += this.wobbleSpeed;
+    this.x += this.vx + Math.sin(this.wobble) * this.wobbleAmp;
+    this.y += this.vy;
+    this.rot += this.rotSpeed;
+    this.flap += this.flapSpeed;
+    this.pulse += this.pulseSpeed;
+  }
+
+  draw() {
+    if (this.life <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = Math.min(this.life, 1) * Math.max(0, this.life);
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rot);
+
+    switch(this.type) {
+      case 'flower': this.drawFlower(); break;
+      case 'spark':  this.drawSpark(); break;
+      case 'butterfly': this.drawButterfly(); break;
+      case 'firefly': this.drawFirefly(); break;
+      case 'leaf': this.drawLeaf(); break;
+      case 'star': this.drawStar(); break;
+    }
+    ctx.restore();
+  }
+
+  drawFlower() {
+    const s = this.size;
+    const petals = 5;
+    // glow
+    const grd = ctx.createRadialGradient(0,0,0,0,0,s*1.2);
+    grd.addColorStop(0, this.color + 'cc');
+    grd.addColorStop(1, this.color + '00');
+    ctx.fillStyle = grd;
+    ctx.beginPath(); ctx.arc(0,0,s*1.2,0,Math.PI*2); ctx.fill();
+    // petals
+    for(let i=0;i<petals;i++){
+      ctx.save();
+      ctx.rotate((Math.PI*2/petals)*i);
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.ellipse(0, -s*0.6, s*0.3, s*0.55, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
+    // center
+    ctx.fillStyle = '#fff9c4';
+    ctx.beginPath(); ctx.arc(0,0,s*0.28,0,Math.PI*2); ctx.fill();
+  }
+
+  drawSpark() {
+    const s = this.size;
+    // bright glow
+    const grd = ctx.createRadialGradient(0,0,0,0,0,s*1.5);
+    grd.addColorStop(0, '#fff');
+    grd.addColorStop(0.3, this.color);
+    grd.addColorStop(1, this.color + '00');
+    ctx.fillStyle = grd;
+    ctx.beginPath(); ctx.arc(0,0,s*1.5,0,Math.PI*2); ctx.fill();
+    // star burst lines
+    ctx.strokeStyle = this.color;
+    ctx.lineWidth = s * 0.12;
+    ctx.lineCap = 'round';
+    for(let i=0;i<8;i++){
+      ctx.save();
+      ctx.rotate((Math.PI*2/8)*i);
+      ctx.beginPath();
+      ctx.moveTo(0, s*0.15);
+      ctx.lineTo(0, s*0.75);
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(0,0,s*0.2,0,Math.PI*2); ctx.fill();
+  }
+
+  drawButterfly() {
+    const s = this.size;
+    const flap = Math.cos(this.flap); // -1..1
+    // wings squish horizontally with flap
+    ctx.fillStyle = this.color;
+    // upper wings
+    ctx.save();
+    ctx.scale(Math.abs(flap), 1);
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.ellipse(-s*0.45, -s*0.2, s*0.5, s*0.35, -0.4, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = this.color2;
+    ctx.beginPath();
+    ctx.ellipse(s*0.45, -s*0.2, s*0.5, s*0.35, 0.4, 0, Math.PI*2);
+    ctx.fill();
+    // lower wings
+    ctx.fillStyle = this.color + 'bb';
+    ctx.beginPath();
+    ctx.ellipse(-s*0.3, s*0.25, s*0.3, s*0.22, 0.3, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(s*0.3, s*0.25, s*0.3, s*0.22, -0.3, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+    // body
+    ctx.fillStyle = '#2d1b4e';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, s*0.08, s*0.45, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  drawFirefly() {
+    const s = this.size;
+    const glow = 0.5 + 0.5 * Math.sin(this.pulse);
+    const r = s * (0.8 + glow * 0.5);
+    const grd = ctx.createRadialGradient(0,0,0,0,0,r);
+    grd.addColorStop(0, '#fff');
+    grd.addColorStop(0.3, this.color);
+    grd.addColorStop(1, this.color + '00');
+    ctx.fillStyle = grd;
+    ctx.globalAlpha *= (0.6 + glow * 0.4);
+    ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(0,0,s*0.15,0,Math.PI*2); ctx.fill();
+  }
+
+  drawLeaf() {
+    const s = this.size;
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.moveTo(0, -s*0.7);
+    ctx.bezierCurveTo(s*0.5, -s*0.4, s*0.5, s*0.4, 0, s*0.7);
+    ctx.bezierCurveTo(-s*0.5, s*0.4, -s*0.5, -s*0.4, 0, -s*0.7);
+    ctx.fill();
+    // vein
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, -s*0.6);
+    ctx.lineTo(0, s*0.6);
+    ctx.stroke();
+  }
+
+  drawStar() {
+    const s = this.size;
+    const pts = 5;
+    ctx.fillStyle = this.color;
+    // glow
+    const grd = ctx.createRadialGradient(0,0,0,0,0,s);
+    grd.addColorStop(0, this.color + 'ff');
+    grd.addColorStop(1, this.color + '00');
+    ctx.fillStyle = grd;
+    ctx.beginPath(); ctx.arc(0,0,s,0,Math.PI*2); ctx.fill();
+    // star shape
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    for(let i=0;i<pts*2;i++){
+      const r = i%2===0 ? s*0.7 : s*0.3;
+      const a = (Math.PI/pts)*i - Math.PI/2;
+      i===0 ? ctx.moveTo(Math.cos(a)*r, Math.sin(a)*r) : ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
+    }
+    ctx.closePath(); ctx.fill();
+  }
+}
+
+// ─── SPAWN ─────────────────────────────────────────────────────────
+const MAX_PARTICLES = 350;
+
+function spawnAt(x, y, count = 3) {
+  if (particles.length >= MAX_PARTICLES) return;
+  for(let i = 0; i < count; i++) {
+    particles.push(new Particle(x, y));
+    totalSpawned++;
+  }
+  scoreEl.textContent = totalSpawned;
+}
+
+// ─── DRAW LOOP ─────────────────────────────────────────────────────
+let lastTime = 0;
+function loop(ts) {
+  requestAnimationFrame(loop);
+  const dt = ts - lastTime;
+  lastTime = ts;
+
+  // dark trailing overlay for glow effect
+  ctx.fillStyle = 'rgba(10,0,21,0.35)';
+  ctx.fillRect(0,0,W,H);
+
+  // spawn on hand movement
+  for(const pt of handPoints) {
+    if(Math.random() < 0.55) spawnAt(pt.x * W, pt.y * H, 2);
+  }
+
+  // update + draw particles
+  for(let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.update();
+    p.draw();
+    if(p.life <= 0 || p.y > H + 60) particles.splice(i, 1);
+  }
+
+  // draw hand glow dots
+  for(const pt of handPoints) {
+    const grd = ctx.createRadialGradient(pt.x*W, pt.y*H, 0, pt.x*W, pt.y*H, 30);
+    grd.addColorStop(0, 'rgba(255,200,255,0.55)');
+    grd.addColorStop(1, 'rgba(255,200,255,0)');
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(pt.x*W, pt.y*H, 30, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+requestAnimationFrame(loop);
+
+// ─── MEDIAPIPE HANDS ───────────────────────────────────────────────
+const hands = new Hands({
+  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+});
+
+hands.setOptions({
+  maxNumHands: 2,
+  modelComplexity: 0,   // 0 = fast, important for tablet
+  minDetectionConfidence: 0.6,
+  minTrackingConfidence: 0.5,
+});
+
+hands.onResults(results => {
+  handPoints = [];
+  if(results.multiHandLandmarks) {
+    for(const hand of results.multiHandLandmarks) {
+      for(const lm of hand) {
+        // mirror X since video is mirrored
+        handPoints.push({ x: 1 - lm.x, y: lm.y });
+      }
+    }
+  }
+});
+
+// ─── CAMERA ────────────────────────────────────────────────────────
+const camera = new Camera(video, {
+  onFrame: async () => { await hands.send({ image: video }); },
+  width: 640, height: 480,
+  facingMode: 'user',
+});
+
+camera.start().then(() => {
+  loading.classList.add('hidden');
+}).catch(err => {
+  document.querySelector('#loading div:last-child').textContent = '📷 Camera permission needed!';
+  console.error(err);
+});
+</script>
+</body>
+</html>
