@@ -339,5 +339,14 @@ if('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').then(r => console.log('SW registered', r.scope));
 }
 </script>
+<script>
+// Request fullscreen on tap (required for Android)
+document.addEventListener('click', () => {
+  const el = document.documentElement;
+  if (!document.fullscreenElement) {
+    (el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen).call(el);
+  }
+}, { once: true });
+</script>
 </body>
 </html>
