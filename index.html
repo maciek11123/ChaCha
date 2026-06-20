@@ -103,7 +103,7 @@ class Particle {
   constructor(x,y) {
     this.type=pick(TYPES); this.x=x+rand(-20,20); this.y=y+rand(-20,20);
     this.color=pick(PAL[this.type]); this.color2=pick(PAL[this.type]);
-    this.size=rand(12,30); this.life=1; this.decay=rand(0.008,0.022);
+    this.size=rand(12,30); this.life=1; this.decay=rand(0.016,0.035);
     this.vx=rand(-3,3); this.vy=rand(-4.5,-0.5); this.gravity=rand(0.04,0.12);
     this.rot=rand(0,Math.PI*2); this.rotSpeed=rand(-0.09,0.09);
     this.wobble=rand(0,Math.PI*2); this.wobbleSpeed=rand(0.04,0.11); this.wobbleAmp=rand(0.5,3);
@@ -167,7 +167,7 @@ class Particle {
 }
 
 function spawnAt(x, y, n=2) {
-  if(particles.length >= 300) return;
+  if(particles.length >= 120) return;
   for(let i=0;i<n;i++) particles.push(new Particle(x,y));
   totalSpawned += n;
   scoreEl.textContent = totalSpawned;
@@ -192,7 +192,7 @@ function renderLoop() {
   // spawn + glow only when hands detected
   if (handPoints.length > 0) {
     for(const pt of handPoints) {
-      if(Math.random() < 0.5) spawnAt(pt.x*W, pt.y*H, 2);
+      if(Math.random() < 0.15) spawnAt(pt.x*W, pt.y*H, 1);
     }
     // draw glow at fingertips only (landmarks 4,8,12,16,20 = fingertips)
     // handPoints has all 21 per hand; fingertips are every 21*hand + [4,8,12,16,20]
