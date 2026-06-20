@@ -87,7 +87,7 @@ function drawVideo() {
 }
 
 // ── PARTICLES ────────────────────────────────────────────────────────
-const TYPES = ['flower','spark','butterfly','firefly','leaf','star'];
+const TYPES = ['flower','flower','flower','butterfly','butterfly','flower'];
 const PAL = {
   flower:    ['#ff6eb4','#ff9de2','#ffb347','#ff6b6b','#c084fc','#f9a8d4'],
   spark:     ['#ffe066','#ff9900','#fff','#ff6600','#ffcc00','#ffd700'],
@@ -103,8 +103,8 @@ class Particle {
   constructor(x,y) {
     this.type=pick(TYPES); this.x=x+rand(-20,20); this.y=y+rand(-20,20);
     this.color=pick(PAL[this.type]); this.color2=pick(PAL[this.type]);
-    this.size=rand(22,48); this.life=1; this.decay=rand(0.005,0.010);
-    this.vx=rand(-3,3); this.vy=rand(-2.0,-0.3); this.gravity=rand(0.01,0.04);
+    this.size=rand(28,60); this.life=1; this.decay=rand(0.003,0.007);
+    this.vx=rand(-3,3); this.vy=rand(-1.5,-0.2); this.gravity=rand(0.008,0.025);
     this.rot=rand(0,Math.PI*2); this.rotSpeed=rand(-0.09,0.09);
     this.wobble=rand(0,Math.PI*2); this.wobbleSpeed=rand(0.04,0.11); this.wobbleAmp=rand(0.5,3);
     this.flap=rand(0,Math.PI*2); this.flapSpeed=rand(0.1,0.28);
@@ -155,12 +155,38 @@ class Particle {
         break;
       }
       case 'butterfly': {
-        const f=Math.abs(Math.cos(this.flap));
-        ctx.save();ctx.scale(f,1);
-        ctx.fillStyle=this.color;ctx.beginPath();ctx.ellipse(-s*.45,-s*.2,s*.5,s*.35,-0.4,0,Math.PI*2);ctx.fill();
-        ctx.fillStyle=this.color2;ctx.beginPath();ctx.ellipse(s*.45,-s*.2,s*.5,s*.35,0.4,0,Math.PI*2);ctx.fill();
+        const f = Math.abs(Math.cos(this.flap));
+        ctx.save(); ctx.scale(f, 1);
+        // upper wings with gradient
+        const bgl = ctx.createRadialGradient(-s*.4,-s*.25,0,-s*.4,-s*.25,s*.55);
+        bgl.addColorStop(0,'#fff'); bgl.addColorStop(0.4,this.color); bgl.addColorStop(1,this.color+'66');
+        ctx.fillStyle=bgl; ctx.beginPath(); ctx.ellipse(-s*.42,-s*.22,s*.52,s*.38,-0.35,0,Math.PI*2); ctx.fill();
+        const bgr = ctx.createRadialGradient(s*.4,-s*.25,0,s*.4,-s*.25,s*.55);
+        bgr.addColorStop(0,'#fff'); bgr.addColorStop(0.4,this.color2); bgr.addColorStop(1,this.color2+'66');
+        ctx.fillStyle=bgr; ctx.beginPath(); ctx.ellipse(s*.42,-s*.22,s*.52,s*.38,0.35,0,Math.PI*2); ctx.fill();
+        // lower wings
+        const bll = ctx.createRadialGradient(-s*.28,s*.28,0,-s*.28,s*.28,s*.32);
+        bll.addColorStop(0,this.color2); bll.addColorStop(1,this.color+'44');
+        ctx.fillStyle=bll; ctx.beginPath(); ctx.ellipse(-s*.28,s*.28,s*.32,s*.24,0.4,0,Math.PI*2); ctx.fill();
+        const blr = ctx.createRadialGradient(s*.28,s*.28,0,s*.28,s*.28,s*.32);
+        blr.addColorStop(0,this.color); blr.addColorStop(1,this.color2+'44');
+        ctx.fillStyle=blr; ctx.beginPath(); ctx.ellipse(s*.28,s*.28,s*.32,s*.24,-0.4,0,Math.PI*2); ctx.fill();
+        // wing shimmer dots
+        ctx.fillStyle='rgba(255,255,255,0.6)';
+        ctx.beginPath(); ctx.arc(-s*.38,-s*.28,s*.07,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(s*.38,-s*.28,s*.07,0,Math.PI*2); ctx.fill();
         ctx.restore();
-        ctx.fillStyle='#1a0a2e';ctx.beginPath();ctx.ellipse(0,0,s*.08,s*.4,0,0,Math.PI*2);ctx.fill();
+        // body
+        const bodyG = ctx.createLinearGradient(0,-s*.4,0,s*.4);
+        bodyG.addColorStop(0,'#3b1f6e'); bodyG.addColorStop(1,'#1a0a2e');
+        ctx.fillStyle=bodyG; ctx.beginPath(); ctx.ellipse(0,0,s*.07,s*.42,0,0,Math.PI*2); ctx.fill();
+        // antennae
+        ctx.strokeStyle='#6b3fa0'; ctx.lineWidth=s*.04; ctx.lineCap='round';
+        ctx.beginPath(); ctx.moveTo(0,-s*.38); ctx.quadraticCurveTo(-s*.18,-s*.65,-s*.22,-s*.72); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0,-s*.38); ctx.quadraticCurveTo(s*.18,-s*.65,s*.22,-s*.72); ctx.stroke();
+        ctx.fillStyle='#c084fc';
+        ctx.beginPath(); ctx.arc(-s*.22,-s*.72,s*.06,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(s*.22,-s*.72,s*.06,0,Math.PI*2); ctx.fill();
         break;
       }
       case 'firefly': {
@@ -188,7 +214,7 @@ class Particle {
 }
 
 function spawnAt(x, y, n=2) {
-  if(particles.length >= 40) return;
+  if(particles.length >= 25) return;
   for(let i=0;i<n;i++) particles.push(new Particle(x,y));
   totalSpawned += n;
   scoreEl.textContent = totalSpawned;
@@ -213,7 +239,7 @@ function renderLoop() {
   // spawn + glow only when hands detected
   if (handPoints.length > 0) {
     for(const pt of handPoints) {
-      if(Math.random() < 0.04) spawnAt(pt.x*W, pt.y*H, 1);
+      if(Math.random() < 0.022) spawnAt(pt.x*W, pt.y*H, 1);
     }
     // draw glow at fingertips only (landmarks 4,8,12,16,20 = fingertips)
     // handPoints has all 21 per hand; fingertips are every 21*hand + [4,8,12,16,20]
