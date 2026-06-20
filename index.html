@@ -109,7 +109,7 @@ class Particle {
   constructor(x,y) {
     this.type=pick(TYPES); this.x=x+rand(-20,20); this.y=y+rand(-20,20);
     this.color=pick(PAL[this.type]); this.color2=pick(PAL[this.type]);
-    this.size=rand(14,28); this.life=1; this.decay=rand(0.003,0.007);
+    this.size=rand(30,55); this.life=1; this.decay=rand(0.003,0.007);
     this.vx=rand(-3,3); this.vy=rand(-1.5,-0.2); this.gravity=rand(0.008,0.025);
     this.rot=rand(0,Math.PI*2); this.rotSpeed=rand(-0.09,0.09);
     this.wobble=rand(0,Math.PI*2); this.wobbleSpeed=rand(0.04,0.11); this.wobbleAmp=rand(0.5,3);
