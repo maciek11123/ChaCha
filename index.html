@@ -103,8 +103,8 @@ class Particle {
   constructor(x,y) {
     this.type=pick(TYPES); this.x=x+rand(-20,20); this.y=y+rand(-20,20);
     this.color=pick(PAL[this.type]); this.color2=pick(PAL[this.type]);
-    this.size=rand(12,30); this.life=1; this.decay=rand(0.016,0.035);
-    this.vx=rand(-3,3); this.vy=rand(-4.5,-0.5); this.gravity=rand(0.04,0.12);
+    this.size=rand(22,48); this.life=1; this.decay=rand(0.005,0.010);
+    this.vx=rand(-3,3); this.vy=rand(-2.0,-0.3); this.gravity=rand(0.01,0.04);
     this.rot=rand(0,Math.PI*2); this.rotSpeed=rand(-0.09,0.09);
     this.wobble=rand(0,Math.PI*2); this.wobbleSpeed=rand(0.04,0.11); this.wobbleAmp=rand(0.5,3);
     this.flap=rand(0,Math.PI*2); this.flapSpeed=rand(0.1,0.28);
@@ -123,8 +123,29 @@ class Particle {
     ctx.translate(this.x, this.y); ctx.rotate(this.rot);
     switch(this.type) {
       case 'flower': {
-        for(let i=0;i<5;i++){ctx.save();ctx.rotate(Math.PI*2/5*i);ctx.fillStyle=this.color;ctx.beginPath();ctx.ellipse(0,-s*.6,s*.3,s*.55,0,0,Math.PI*2);ctx.fill();ctx.restore();}
-        ctx.fillStyle='#fff9c4';ctx.beginPath();ctx.arc(0,0,s*.28,0,Math.PI*2);ctx.fill();
+        // outer glow
+        const fg=ctx.createRadialGradient(0,0,0,0,0,s*1.4);
+        fg.addColorStop(0,this.color+'44'); fg.addColorStop(1,this.color+'00');
+        ctx.fillStyle=fg; ctx.beginPath(); ctx.arc(0,0,s*1.4,0,Math.PI*2); ctx.fill();
+        // 6 petals with gradient
+        for(let i=0;i<6;i++){
+          ctx.save(); ctx.rotate(Math.PI*2/6*i);
+          const pg=ctx.createRadialGradient(0,-s*.5,0,0,-s*.5,s*.55);
+          pg.addColorStop(0,'#fff'); pg.addColorStop(0.3,this.color); pg.addColorStop(1,this.color2+'aa');
+          ctx.fillStyle=pg;
+          ctx.beginPath(); ctx.ellipse(0,-s*.52,s*.28,s*.5,0,0,Math.PI*2); ctx.fill();
+          ctx.restore();
+        }
+        // center circle
+        const cg=ctx.createRadialGradient(0,0,0,0,0,s*.32);
+        cg.addColorStop(0,'#fffde0'); cg.addColorStop(1,'#fbbf24');
+        ctx.fillStyle=cg; ctx.beginPath(); ctx.arc(0,0,s*.32,0,Math.PI*2); ctx.fill();
+        // stamen dots
+        for(let i=0;i<6;i++){
+          const a=Math.PI*2/6*i;
+          ctx.fillStyle='#f59e0b';
+          ctx.beginPath(); ctx.arc(Math.cos(a)*s*.18,Math.sin(a)*s*.18,s*.06,0,Math.PI*2); ctx.fill();
+        }
         break;
       }
       case 'spark': {
@@ -167,7 +188,7 @@ class Particle {
 }
 
 function spawnAt(x, y, n=2) {
-  if(particles.length >= 120) return;
+  if(particles.length >= 40) return;
   for(let i=0;i<n;i++) particles.push(new Particle(x,y));
   totalSpawned += n;
   scoreEl.textContent = totalSpawned;
@@ -192,7 +213,7 @@ function renderLoop() {
   // spawn + glow only when hands detected
   if (handPoints.length > 0) {
     for(const pt of handPoints) {
-      if(Math.random() < 0.15) spawnAt(pt.x*W, pt.y*H, 1);
+      if(Math.random() < 0.04) spawnAt(pt.x*W, pt.y*H, 1);
     }
     // draw glow at fingertips only (landmarks 4,8,12,16,20 = fingertips)
     // handPoints has all 21 per hand; fingertips are every 21*hand + [4,8,12,16,20]
