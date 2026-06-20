@@ -18,7 +18,7 @@
     pointer-events: none; text-shadow: 0 0 12px #ffaaff; white-space: nowrap;
   }
   #debug {
-    position: absolute; bottom: 24px; left: 12px; right: 12px;
+    position: absolute; bottom: 24px; left: 12px;
     color: #ff88cc; font-size: 0.85rem; z-index: 10; pointer-events: none;
   }
   #loading {
@@ -37,7 +37,7 @@
 <canvas id="canvas"></canvas>
 <video id="video" playsinline autoplay muted></video>
 <div id="score-badge">✨ <span id="score">0</span> sparks!</div>
-<div id="debug">Starting...</div>
+<div id="debug">Loading...</div>
 <div id="loading">
   <div class="spinner"></div>
   <div>Loading magic... 🌸</div>
@@ -58,9 +58,9 @@ const debugEl  = document.getElementById('debug');
 
 let W, H, totalSpawned = 0;
 const particles = [];
-let handPoints  = [];
+let handPoints  = [];  // only populated when real detection fires
 
-const log = msg => { debugEl.textContent = msg; };
+const log = msg => debugEl.textContent = msg;
 const setStatus = msg => { statusEl.textContent = msg; log(msg); };
 
 function resize() {
@@ -70,23 +70,19 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-// ── draw video cover-fit mirrored ────────────────────────────────────
+// ── video cover-fit mirrored ──────────────────────────────────────────
 function drawVideo() {
   if (video.readyState < 2) return;
   const vw = video.videoWidth, vh = video.videoHeight;
   if (!vw || !vh) return;
-
-  // cover-fit: scale so video fills canvas, crop edges
-  const scale = Math.max(W / vw, H / vh);
-  const dw = vw * scale, dh = vh * scale;
-  const dx = (W - dw) / 2, dy = (H - dh) / 2;
-
+  const scale = Math.max(W/vw, H/vh);
+  const dw = vw*scale, dh = vh*scale;
+  const ox = (W-dw)/2, oy = (H-dh)/2;
   ctx.save();
-  ctx.globalAlpha = 0.4;
-  // mirror horizontally
-  ctx.translate(W, 0);
-  ctx.scale(-1, 1);
-  ctx.drawImage(video, -dx - dw + W, dy, dw, dh); // mirror-adjusted x
+  ctx.globalAlpha = 0.45;
+  ctx.translate(W, 0); ctx.scale(-1, 1);
+  // when mirrored, ox flips: left edge becomes W - ox - dw
+  ctx.drawImage(video, -(ox + dw - W), oy, dw, dh);
   ctx.restore();
 }
 
@@ -101,17 +97,17 @@ const PAL = {
   star:      ['#e0f2fe','#bae6fd','#fff','#f0abfc','#fde68a','#fca5a5'],
 };
 const pick = a => a[Math.floor(Math.random()*a.length)];
-const rand = (a,b) => a+Math.random()*(b-a);
+const rand = (a,b) => a + Math.random()*(b-a);
 
 class Particle {
   constructor(x,y) {
     this.type=pick(TYPES); this.x=x+rand(-20,20); this.y=y+rand(-20,20);
     this.color=pick(PAL[this.type]); this.color2=pick(PAL[this.type]);
-    this.size=rand(12,30); this.life=1; this.decay=rand(0.007,0.02);
-    this.vx=rand(-3,3); this.vy=rand(-4.5,-0.5); this.gravity=rand(0.04,0.13);
+    this.size=rand(12,30); this.life=1; this.decay=rand(0.008,0.022);
+    this.vx=rand(-3,3); this.vy=rand(-4.5,-0.5); this.gravity=rand(0.04,0.12);
     this.rot=rand(0,Math.PI*2); this.rotSpeed=rand(-0.09,0.09);
     this.wobble=rand(0,Math.PI*2); this.wobbleSpeed=rand(0.04,0.11); this.wobbleAmp=rand(0.5,3);
-    this.flap=0; this.flapSpeed=rand(0.1,0.28);
+    this.flap=rand(0,Math.PI*2); this.flapSpeed=rand(0.1,0.28);
     this.pulse=rand(0,Math.PI*2); this.pulseSpeed=rand(0.06,0.15);
   }
   update() {
@@ -121,23 +117,19 @@ class Particle {
   }
   draw() {
     if(this.life<=0) return;
-    const s=this.size, a=Math.min(this.life,1)*Math.max(0,this.life);
-    ctx.save(); ctx.globalAlpha=a; ctx.translate(this.x,this.y); ctx.rotate(this.rot);
+    const s=this.size;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, this.life));
+    ctx.translate(this.x, this.y); ctx.rotate(this.rot);
     switch(this.type) {
       case 'flower': {
-        const g=ctx.createRadialGradient(0,0,0,0,0,s*1.2);
-        g.addColorStop(0,this.color+'cc'); g.addColorStop(1,this.color+'00');
-        ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,s*1.2,0,Math.PI*2); ctx.fill();
         for(let i=0;i<5;i++){ctx.save();ctx.rotate(Math.PI*2/5*i);ctx.fillStyle=this.color;ctx.beginPath();ctx.ellipse(0,-s*.6,s*.3,s*.55,0,0,Math.PI*2);ctx.fill();ctx.restore();}
         ctx.fillStyle='#fff9c4';ctx.beginPath();ctx.arc(0,0,s*.28,0,Math.PI*2);ctx.fill();
         break;
       }
       case 'spark': {
-        const g=ctx.createRadialGradient(0,0,0,0,0,s*1.5);
-        g.addColorStop(0,'#fff');g.addColorStop(0.3,this.color);g.addColorStop(1,this.color+'00');
-        ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,s*1.5,0,Math.PI*2);ctx.fill();
         ctx.strokeStyle=this.color;ctx.lineWidth=s*.12;ctx.lineCap='round';
-        for(let i=0;i<8;i++){ctx.save();ctx.rotate(Math.PI/4*i);ctx.beginPath();ctx.moveTo(0,s*.15);ctx.lineTo(0,s*.75);ctx.stroke();ctx.restore();}
+        for(let i=0;i<8;i++){ctx.save();ctx.rotate(Math.PI/4*i);ctx.beginPath();ctx.moveTo(0,s*.15);ctx.lineTo(0,s*.7);ctx.stroke();ctx.restore();}
         ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(0,0,s*.2,0,Math.PI*2);ctx.fill();
         break;
       }
@@ -146,36 +138,26 @@ class Particle {
         ctx.save();ctx.scale(f,1);
         ctx.fillStyle=this.color;ctx.beginPath();ctx.ellipse(-s*.45,-s*.2,s*.5,s*.35,-0.4,0,Math.PI*2);ctx.fill();
         ctx.fillStyle=this.color2;ctx.beginPath();ctx.ellipse(s*.45,-s*.2,s*.5,s*.35,0.4,0,Math.PI*2);ctx.fill();
-        ctx.fillStyle=this.color+'bb';
-        ctx.beginPath();ctx.ellipse(-s*.3,s*.25,s*.3,s*.22,0.3,0,Math.PI*2);ctx.fill();
-        ctx.beginPath();ctx.ellipse(s*.3,s*.25,s*.3,s*.22,-0.3,0,Math.PI*2);ctx.fill();
         ctx.restore();
-        ctx.fillStyle='#2d1b4e';ctx.beginPath();ctx.ellipse(0,0,s*.08,s*.45,0,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='#1a0a2e';ctx.beginPath();ctx.ellipse(0,0,s*.08,s*.4,0,0,Math.PI*2);ctx.fill();
         break;
       }
       case 'firefly': {
         const glow=0.5+0.5*Math.sin(this.pulse);
-        const r=s*(0.8+glow*0.5);
-        const g=ctx.createRadialGradient(0,0,0,0,0,r);
-        g.addColorStop(0,'#fff');g.addColorStop(0.3,this.color);g.addColorStop(1,this.color+'00');
-        ctx.fillStyle=g;ctx.globalAlpha*=(0.6+glow*0.4);ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fill();
-        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(0,0,s*.15,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle=this.color;ctx.globalAlpha*=(0.5+glow*0.5);
+        ctx.beginPath();ctx.arc(0,0,s*(0.6+glow*0.4),0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='#fff';ctx.globalAlpha=1;ctx.beginPath();ctx.arc(0,0,s*.12,0,Math.PI*2);ctx.fill();
         break;
       }
       case 'leaf': {
         ctx.fillStyle=this.color;ctx.beginPath();
         ctx.moveTo(0,-s*.7);ctx.bezierCurveTo(s*.5,-s*.4,s*.5,s*.4,0,s*.7);
         ctx.bezierCurveTo(-s*.5,s*.4,-s*.5,-s*.4,0,-s*.7);ctx.fill();
-        ctx.strokeStyle='rgba(255,255,255,0.35)';ctx.lineWidth=1.5;
-        ctx.beginPath();ctx.moveTo(0,-s*.6);ctx.lineTo(0,s*.6);ctx.stroke();
         break;
       }
       case 'star': {
-        const g=ctx.createRadialGradient(0,0,0,0,0,s);
-        g.addColorStop(0,this.color+'ff');g.addColorStop(1,this.color+'00');
-        ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,s,0,Math.PI*2);ctx.fill();
         ctx.fillStyle=this.color;ctx.beginPath();
-        for(let i=0;i<10;i++){const r2=i%2===0?s*.7:s*.3;const a2=Math.PI/5*i-Math.PI/2;i===0?ctx.moveTo(Math.cos(a2)*r2,Math.sin(a2)*r2):ctx.lineTo(Math.cos(a2)*r2,Math.sin(a2)*r2);}
+        for(let i=0;i<10;i++){const r2=i%2===0?s*.7:s*.3;const a=Math.PI/5*i-Math.PI/2;i===0?ctx.moveTo(Math.cos(a)*r2,Math.sin(a)*r2):ctx.lineTo(Math.cos(a)*r2,Math.sin(a)*r2);}
         ctx.closePath();ctx.fill();
         break;
       }
@@ -184,31 +166,52 @@ class Particle {
   }
 }
 
-function spawnAt(x,y,n=2) {
-  if(particles.length>=400) return;
+function spawnAt(x, y, n=2) {
+  if(particles.length >= 300) return;
   for(let i=0;i<n;i++) particles.push(new Particle(x,y));
-  totalSpawned+=n; scoreEl.textContent=totalSpawned;
+  totalSpawned += n;
+  scoreEl.textContent = totalSpawned;
 }
 
 // ── RENDER LOOP ───────────────────────────────────────────────────────
 function renderLoop() {
   requestAnimationFrame(renderLoop);
-  // dark overlay
-  ctx.fillStyle='rgba(10,0,21,0.4)';
-  ctx.fillRect(0,0,W,H);
-  // video
+
+  // FULL clear every frame — no ghosting
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0a0015';
+  ctx.fillRect(0, 0, W, H);
+
+  // video feed
   drawVideo();
-  // hand glow + spawn
-  for(const pt of handPoints) {
-    if(Math.random()<0.6) spawnAt(pt.x*W, pt.y*H, 2);
-    const g=ctx.createRadialGradient(pt.x*W,pt.y*H,0,pt.x*W,pt.y*H,32);
-    g.addColorStop(0,'rgba(255,180,255,0.7)');g.addColorStop(1,'rgba(255,180,255,0)');
-    ctx.fillStyle=g;ctx.beginPath();ctx.arc(pt.x*W,pt.y*H,32,0,Math.PI*2);ctx.fill();
+
+  // dark tint over video so particles pop
+  ctx.fillStyle = 'rgba(10,0,21,0.3)';
+  ctx.fillRect(0, 0, W, H);
+
+  // spawn + glow only when hands detected
+  if (handPoints.length > 0) {
+    for(const pt of handPoints) {
+      if(Math.random() < 0.5) spawnAt(pt.x*W, pt.y*H, 2);
+    }
+    // draw glow at fingertips only (landmarks 4,8,12,16,20 = fingertips)
+    // handPoints has all 21 per hand; fingertips are every 21*hand + [4,8,12,16,20]
+    for(let i=0;i<handPoints.length;i++) {
+      const localIdx = i % 21;
+      if([4,8,12,16,20].includes(localIdx)) {
+        const pt = handPoints[i];
+        const g = ctx.createRadialGradient(pt.x*W,pt.y*H,0,pt.x*W,pt.y*H,28);
+        g.addColorStop(0,'rgba(255,180,255,0.8)');
+        g.addColorStop(1,'rgba(255,180,255,0)');
+        ctx.fillStyle=g;ctx.beginPath();ctx.arc(pt.x*W,pt.y*H,28,0,Math.PI*2);ctx.fill();
+      }
+    }
   }
-  // particles
+
+  // draw + age particles
   for(let i=particles.length-1;i>=0;i--) {
     const p=particles[i]; p.update(); p.draw();
-    if(p.life<=0||p.y>H+80) particles.splice(i,1);
+    if(p.life<=0 || p.y>H+80) particles.splice(i,1);
   }
 }
 requestAnimationFrame(renderLoop);
@@ -227,7 +230,7 @@ async function init() {
     handLandmarker = await HandLandmarker.createFromOptions(vision, {
       baseOptions: {
         modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-        delegate: "CPU"   // CPU more reliable on Android WebView
+        delegate: "CPU"
       },
       runningMode: "VIDEO",
       numHands: 2,
@@ -242,15 +245,11 @@ async function init() {
       audio: false
     });
     video.srcObject = stream;
-
-    await new Promise((res, rej) => {
-      video.onloadedmetadata = res;
-      video.onerror = rej;
-    });
+    await new Promise(res => { video.onloadedmetadata = res; });
     await video.play();
 
-    setStatus('✨ Running! Show your hands!');
-    setTimeout(() => loading.classList.add('hidden'), 1000);
+    setStatus('✨ Show your hands!');
+    setTimeout(() => loading.classList.add('hidden'), 800);
     detectLoop();
 
   } catch(e) {
@@ -265,21 +264,18 @@ function detectLoop() {
   if(video.currentTime === lastVideoTime) return;
   lastVideoTime = video.currentTime;
 
-  let results;
   try {
-    results = handLandmarker.detectForVideo(video, performance.now());
-  } catch(e) {
-    log('detect err: ' + e.message); return;
-  }
-
-  handPoints = [];
-  if(results?.landmarks?.length) {
-    for(const hand of results.landmarks) {
-      for(const lm of hand) handPoints.push({x: 1-lm.x, y: lm.y});
+    const results = handLandmarker.detectForVideo(video, performance.now());
+    handPoints = [];
+    if(results?.landmarks?.length) {
+      for(const hand of results.landmarks)
+        for(const lm of hand) handPoints.push({x: 1-lm.x, y: lm.y});
+      log(`👋 ${results.landmarks.length} hand(s)`);
+    } else {
+      log('✋ Show your hands!');
     }
-    log(`👋 ${results.landmarks.length} hand(s) — ${handPoints.length} points`);
-  } else {
-    log('Move your hands! ✋');
+  } catch(e) {
+    log('err: '+e.message);
   }
 }
 
