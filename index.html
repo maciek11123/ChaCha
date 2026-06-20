@@ -32,6 +32,12 @@
   .spinner { width: 52px; height: 52px; border: 4px solid rgba(255,255,255,0.1); border-top-color: #ff88cc; border-radius: 50%; animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 </style>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Magic Hands">
 </head>
 <body>
 <canvas id="canvas"></canvas>
@@ -327,6 +333,11 @@ function detectLoop() {
 }
 
 init();
+</script>
+<script>
+if('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').then(r => console.log('SW registered', r.scope));
+}
 </script>
 </body>
 </html>
